@@ -59,8 +59,37 @@ def crc16(data, crc, len)
     return crc
 end
 
+class stats
+    var depth, stack, pos, cnt
+
+    def init(depth)
+        self.depth = depth
+        self.stack = bytes()
+        self.stack.resize(depth)
+        self.depth = depth
+        self.pos = 0
+        self.cnt = 0
+    end
+
+    def push(val)
+        self.stack[self.pos] = val ? 1 : 0
+        self.pos = (self.pos + 1) % self.depth
+        self.cnt += 1
+    end
+
+    def getQuality()
+        if self.cnt < self.depth return -1 end
+        var sum = 0
+        for i: 0 .. self.depth - 1
+            sum += self.stack[i]
+        end
+        return sum / self.depth * 100
+    end
+
+end
+
 class smr
-    var telegram, rules, ser, crc, wireCrc, eotpos, payloadAvailable
+    var telegram, rules, ser, crc, wireCrc, eotpos, payloadAvailable, wireStats
 
     # 1,1-0:32.7.0(@1,Voltage,V,voltage_l1,17
     # 1,0-0:1.0.0(@#),Time,time,time,0
@@ -71,6 +100,7 @@ class smr
         self.crc = 0
         self.eotpos = -1
         self.payloadAvailable = false
+        self.wireStats = stats(90)
     
         var cf = readTextFile(config['rulesConf'])
         var cfRules = string.split(cf, "\n")
@@ -165,12 +195,27 @@ class smr
         self.crc = crc16(self.telegram, 0, self.eotpos + 1)
         self.crc = format('%04X', self.crc)
         if self.crc == self.wireCrc
+            self.wireStats.push(true)
             self.processPayload()
             log('processed payload, CRC OK')
         else
+            self.wireStats.push(false)
             log(format('payload CRC error, calculated CRC: %s, CRC on wire: %s', self.crc, self.wireCrc))
         end
         self.payloadAvailable = false
+
+        var wq = self.wireStats.getQuality()
+        if wq == -1 return end
+        if config['useJson']
+            var topic = config['baseTopic'] + 'SENSOR'
+            var payload = format(
+                '{"Time":"%s","%s":{"%s":%.0f}}', tasmota.time_str(tasmota.rtc()['local']),
+                config['meterName'], 'wire_quality', wq)
+            mqtt.publish(topic, payload)
+        else
+            var topic = config['baseTopic'] + config['simpleTopic'] + '/wire_quality'
+            mqtt.publish(topic, format('%s', wq))
+        end
     end
 
 end
