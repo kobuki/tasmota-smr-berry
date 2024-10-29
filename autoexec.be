@@ -9,9 +9,9 @@ var config = {
     'serialBaud': 115200,
     'simpleTopic': 'smr',
     'baseTopic': string.replace(string.replace(
-        tasmota.cmd('FullTopic',true)['FullTopic'],
-        '%topic%', tasmota.cmd('Topic',true)['Topic']),
-        '%prefix%', tasmota.cmd('Prefix',true)['Prefix3']),
+        tasmota.cmd('FullTopic', true)['FullTopic'],
+        '%topic%', tasmota.cmd('Topic', true)['Topic']),
+        '%prefix%', tasmota.cmd('Prefix', true)['Prefix3']),
     'useJson': false,
     'meterName': 'ma105'
 }
@@ -24,7 +24,6 @@ def bufFind(buf, needle)
     for i: 0 .. buf.size() - 1
         if buf[i] == needle
             return i
-            break
         end
     end
     return -1
