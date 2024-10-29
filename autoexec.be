@@ -13,7 +13,8 @@ var config = {
         '%topic%', tasmota.cmd('Topic', true)['Topic']),
         '%prefix%', tasmota.cmd('Prefix', true)['Prefix3']),
     'useJson': false,
-    'meterName': 'ma105'
+    'meterName': 'ma105',
+    'statDepth': 90
 }
 
 def log(msg)
@@ -66,7 +67,6 @@ class stats
         self.depth = depth
         self.stack = bytes()
         self.stack.resize(depth)
-        self.depth = depth
         self.pos = 0
         self.cnt = 0
     end
@@ -83,7 +83,7 @@ class stats
         for i: 0 .. self.depth - 1
             sum += self.stack[i]
         end
-        return sum / self.depth * 100
+        return sum * 100 / self.depth
     end
 
 end
@@ -100,7 +100,7 @@ class smr
         self.crc = 0
         self.eotpos = -1
         self.payloadAvailable = false
-        self.wireStats = stats(90)
+        self.wireStats = stats(config['statDepth'])
     
         var cf = readTextFile(config['rulesConf'])
         var cfRules = string.split(cf, "\n")
@@ -209,12 +209,12 @@ class smr
         if config['useJson']
             var topic = config['baseTopic'] + 'SENSOR'
             var payload = format(
-                '{"Time":"%s","%s":{"%s":%.0f}}', tasmota.time_str(tasmota.rtc()['local']),
+                '{"Time":"%s","%s":{"%s":%d}}', tasmota.time_str(tasmota.rtc()['local']),
                 config['meterName'], 'wire_quality', wq)
             mqtt.publish(topic, payload)
         else
             var topic = config['baseTopic'] + config['simpleTopic'] + '/wire_quality'
-            mqtt.publish(topic, format('%s', wq))
+            mqtt.publish(topic, format('%d', wq))
         end
     end
 
