@@ -7,5 +7,5 @@
     "useJson": false,
     "meterName": "ma105",
     "statDepth": 90,
-    "debugTelegram": true
+    "debugTelegram": false
 }
