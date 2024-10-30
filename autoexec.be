@@ -15,7 +15,7 @@ var config = {
     'useJson': false,
     'meterName': 'ma105',
     'statDepth': 90,
-    'debugTelegram': false
+    'debugTelegram': true
 }
 
 def log(msg)
@@ -202,7 +202,7 @@ class smr
         end
         self.payloadAvailable = false
 
-        if self.config['debugTelegram']
+        if config['debugTelegram']
             var dtopic = config['baseTopic'] + config['simpleTopic'] + '/telegram'
             var half = self.telegram.size() / 2
             mqtt.publish(dtopic + '1', self.telegram[0 .. half - 1].tohex())
