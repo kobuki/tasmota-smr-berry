@@ -238,6 +238,10 @@ class smr
             var unit = rule[1]
             tmp += format('{s}%s{m}%s %s{e}', desc, value, unit)
         end
+        var wq = self.wireStats.getQuality()
+        if wq != -1
+            tmp += format('{s}Signal quality{m}%d %%{e}', wq)
+        end
         tasmota.web_send_decimal(tmp)
     end
 
@@ -248,6 +252,10 @@ class smr
         for name: self.config['webSensors']
             var value = self.sensors[name][1]
             fragMap[name] = value
+        end
+        var wq = self.wireStats.getQuality()
+        if wq != -1
+            fragMap['wire_quality'] = wq
         end
         var frag = ',' + json.dump({meterName: fragMap})[1 .. -2]
         tasmota.response_append(frag)
