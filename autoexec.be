@@ -1,22 +1,7 @@
 import string
 import re
 import mqtt
-
-var config = {
-    'rulesConf': 'rules.conf',
-    'serialRx': 3,
-    'serialTx': 1,
-    'serialBaud': 115200,
-    'simpleTopic': 'smr',
-    'baseTopic': string.replace(string.replace(
-        tasmota.cmd('FullTopic', true)['FullTopic'],
-        '%topic%', tasmota.cmd('Topic', true)['Topic']),
-        '%prefix%', tasmota.cmd('Prefix', true)['Prefix3']),
-    'useJson': false,
-    'meterName': 'ma105',
-    'statDepth': 90,
-    'debugTelegram': true
-}
+import json
 
 def log(msg)
     tasmota.log('SMR: ' + msg)
@@ -90,20 +75,28 @@ class stats
 end
 
 class smr
-    var telegram, rules, ser, crc, wireCrc, eotpos, payloadAvailable, wireStats
+    var config, telegram, rules, ser, crc, wireCrc, eotpos, payloadAvailable, wireStats
 
     # 1,1-0:32.7.0(@1,Voltage,V,voltage_l1,17
     # 1,0-0:1.0.0(@#),Time,time,time,0
 
     def init()
+        self.config = nil
         self.telegram = bytes()
         self.rules = {}
         self.crc = nil
         self.eotpos = -1
         self.payloadAvailable = false
-        self.wireStats = stats(config['statDepth'])
+
+        self.config = json.load(readTextFile('smr-config.json'))
+        self.config['baseTopic'] = string.replace(string.replace(
+            tasmota.cmd('FullTopic', true)['FullTopic'],
+            '%topic%', tasmota.cmd('Topic', true)['Topic']),
+            '%prefix%', tasmota.cmd('Prefix', true)['Prefix3'])
     
-        var cf = readTextFile(config['rulesConf'])
+        self.wireStats = stats(self.config['statDepth'])
+        var cf = readTextFile(self.config['rulesConf'])
+
         var cfRules = string.split(cf, "\n")
         for rule: cfRules
             if size(rule) == 0 continue end
@@ -120,7 +113,7 @@ class smr
             happyTasmota()
         end
 
-        self.ser = serial(config['serialRx'], config['serialTx'], config['serialBaud'], serial.SERIAL_8N1, true)
+        self.ser = serial(self.config['serialRx'], self.config['serialTx'], self.config['serialBaud'], serial.SERIAL_8N1, true)
         tasmota.add_fast_loop(/-> self.readTelegram())
     end
 
@@ -149,15 +142,15 @@ class smr
             var name = rule[2]
             var value = rule[3] == 1 ? m[2] : real(m[2])
             # log(format('code: %s, desc: %s, unit: %s, name: %s, value: %s', code, rule[0], rule[1], name, value))
-            if config['useJson']
+            if self.config['useJson']
                 # tele/ma105-meter/SENSOR = {"Time":"2024-10-25T19:06:56","ma105":{"energy_export":102.791}}
-                var topic = config['baseTopic'] + 'SENSOR'
+                var topic = self.config['baseTopic'] + 'SENSOR'
                 var q = rule[3] == 1 ? '"' : ''
-                var payload = format('{"Time":"%s","%s":{"%s":%s}}', timeStr, config['meterName'], name, q + value + q)
+                var payload = format('{"Time":"%s","%s":{"%s":%s}}', timeStr, self.config['meterName'], name, q + value + q)
                 mqtt.publish(topic, payload)
             else
                 # tele/ma105-meter/smr/energy_export = 102.791
-                var topic = config['baseTopic'] + config['simpleTopic'] + '/' + name
+                var topic = self.config['baseTopic'] + self.config['simpleTopic'] + '/' + name
                 mqtt.publish(topic, format('%s', value))
             end
             happyTasmota()
@@ -202,8 +195,8 @@ class smr
         end
         self.payloadAvailable = false
 
-        if config['debugTelegram']
-            var dtopic = config['baseTopic'] + config['simpleTopic'] + '/telegram'
+        if self.config['debugTelegram']
+            var dtopic = self.config['baseTopic'] + self.config['simpleTopic'] + '/telegram'
             var half = self.telegram.size() / 2
             mqtt.publish(dtopic + '1', self.telegram[0 .. half - 1].tohex())
             mqtt.publish(dtopic + '2', self.telegram[half ..].tohex())
@@ -216,14 +209,14 @@ class smr
 
         var wq = self.wireStats.getQuality()
         if wq == -1 return end
-        if config['useJson']
-            var topic = config['baseTopic'] + 'SENSOR'
+        if self.config['useJson']
+            var topic = self.config['baseTopic'] + 'SENSOR'
             var payload = format(
                 '{"Time":"%s","%s":{"%s":%d}}', tasmota.time_str(tasmota.rtc()['local']),
-                config['meterName'], 'wire_quality', wq)
+                self.config['meterName'], 'wire_quality', wq)
             mqtt.publish(topic, payload)
         else
-            var topic = config['baseTopic'] + config['simpleTopic'] + '/wire_quality'
+            var topic = self.config['baseTopic'] + self.config['simpleTopic'] + '/wire_quality'
             mqtt.publish(topic, format('%d', wq))
         end
     end
