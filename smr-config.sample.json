@@ -7,5 +7,23 @@
     "useJson": false,
     "meterName": "ma105",
     "statDepth": 90,
-    "debugTelegram": false
+    "debugTelegram": false,
+    "webSensors": [
+        "voltage_l1",
+        "power_import",
+        "power_export",
+        "energy_import",
+        "energy_export",
+        "power_factor",
+        "frequency"
+    ],
+    "teleperiodSensors": [
+        "voltage_l1",
+        "power_import",
+        "power_export",
+        "energy_import",
+        "energy_export",
+        "power_factor",
+        "frequency"
+    ]
 }

@@ -241,6 +241,18 @@ class smr
         tasmota.web_send_decimal(tmp)
     end
 
+    def json_append()
+        if self.config.find('teleperiodSensors') == nil || !self.dataAvailable return end
+        var meterName = self.config['meterName']
+        var fragMap = {}
+        for name: self.config['webSensors']
+            var value = self.sensors[name][1]
+            fragMap[name] = value
+        end
+        var frag = ',' + json.dump({meterName: fragMap})[1 .. -2]
+        tasmota.response_append(frag)
+      end
+
 end
 
 smrDriver = smr()
