@@ -14,7 +14,8 @@ var config = {
         '%prefix%', tasmota.cmd('Prefix', true)['Prefix3']),
     'useJson': false,
     'meterName': 'ma105',
-    'statDepth': 90
+    'statDepth': 90,
+    'debugTelegram': false
 }
 
 def log(msg)
@@ -97,7 +98,7 @@ class smr
     def init()
         self.telegram = bytes()
         self.rules = {}
-        self.crc = 0
+        self.crc = nil
         self.eotpos = -1
         self.payloadAvailable = false
         self.wireStats = stats(config['statDepth'])
@@ -161,10 +162,6 @@ class smr
             end
             happyTasmota()
         end
-
-        self.telegram = bytes()
-        self.crc = 0
-        self.eotpos = -1
     end
     
     def readTelegram()
@@ -176,13 +173,14 @@ class smr
         self.eotpos = -1
         while tries > 0 && self.eotpos == -1
             tries -= 1
-            tasmota.delay(10)
             while self.ser.available()
                 buf = self.ser.read()
                 self.telegram .. buf
-                if bufFind(self.telegram, 0x21) > -1
-                    self.eotpos = bufFind(self.telegram, 0x21)
+                var eotpos = bufFind(self.telegram, 0x21)
+                if eotpos > -1
+                    self.eotpos = eotpos
                     self.payloadAvailable = true
+                    self.ser.flush()
                     return
                 end
             end
@@ -203,6 +201,18 @@ class smr
             log(format('payload CRC error, calculated CRC: %s, CRC on wire: %s', self.crc, self.wireCrc))
         end
         self.payloadAvailable = false
+
+        if self.config['debugTelegram']
+            var dtopic = config['baseTopic'] + config['simpleTopic'] + '/telegram'
+            var half = self.telegram.size() / 2
+            mqtt.publish(dtopic + '1', self.telegram[0 .. half - 1].tohex())
+            mqtt.publish(dtopic + '2', self.telegram[half ..].tohex())
+            mqtt.publish(dtopic + '_crc', self.crc)
+        end
+
+        self.crc = nil
+        self.eotpos = -1
+        self.telegram = bytes()
 
         var wq = self.wireStats.getQuality()
         if wq == -1 return end
