@@ -16,6 +16,17 @@ def bufFind(buf, needle)
     return -1
 end
 
+def bufFindRev(buf, needle)
+    var i = buf.size() - 1
+    while i >= 0
+        if buf[i] == needle
+            return i
+        end
+        i -= 1
+    end
+    return -1
+end
+
 def readTextFile(file)
     var f = open(file, "r")
     var data = f.read()
@@ -75,7 +86,7 @@ class stats
 end
 
 class smr
-    var config, telegram, rules, ser, crc, wireCrc, eotpos, payloadAvailable, wireStats
+    var config, telegram, rules, ser, crc, wireCrc, payloadAvailable, wireStats
     var sensors, dataAvailable
 
     # 1,1-0:32.7.0(@1,Voltage,V,voltage_l1,17
@@ -86,16 +97,15 @@ class smr
         self.telegram = bytes()
         self.rules = {}
         self.crc = nil
-        self.eotpos = -1
         self.payloadAvailable = false
         self.sensors = {}
         self.dataAvailable = false
 
         self.config = json.load(readTextFile('smr-config.json'))
-        self.config['baseTopic'] = string.replace(string.replace(
+        self.config['tasmotaTopic'] = string.replace(string.replace(
             tasmota.cmd('FullTopic', true)['FullTopic'],
             '%topic%', tasmota.cmd('Topic', true)['Topic']),
-            '%prefix%', tasmota.cmd('Prefix', true)['Prefix3'])
+            '%prefix%', tasmota.cmd('Prefix', true)['Prefix3']) + 'SENSOR'
     
         self.wireStats = stats(self.config['statDepth'])
         var cf = readTextFile(self.config['rulesConf'])
@@ -146,15 +156,15 @@ class smr
             var name = rule[2]
             var value = rule[3] == 1 ? m[2] : real(m[2])
             # log(format('code: %s, desc: %s, unit: %s, name: %s, value: %s', code, rule[0], rule[1], name, value))
-            if self.config['useJson']
+            if self.config['tasmotaTele']
                 # tele/ma105-meter/SENSOR = {"Time":"2024-10-25T19:06:56","ma105":{"energy_export":102.791}}
-                var topic = self.config['baseTopic'] + 'SENSOR'
+                var topic = self.config['tasmotaTopic']
                 var q = rule[3] == 1 ? '"' : ''
                 var payload = format('{"Time":"%s","%s":{"%s":%s}}', timeStr, self.config['meterName'], name, q + value + q)
                 mqtt.publish(topic, payload)
             else
                 # tele/ma105-meter/smr/energy_export = 102.791
-                var topic = self.config['baseTopic'] + self.config['simpleTopic'] + '/' + name
+                var topic = self.config['topic'] + name
                 mqtt.publish(topic, format('%s', value))
             end
             self.sensors[name][1] = value
@@ -168,28 +178,25 @@ class smr
         self.payloadAvailable = false
         var buf = self.ser.read()
         self.telegram = buf
-        var tries = 500
-        self.eotpos = -1
-        while tries > 0 && self.eotpos == -1
-            tries -= 1
+        var t1 = tasmota.millis() + 150
+        while !tasmota.time_reached(t1)
             while self.ser.available()
                 buf = self.ser.read()
                 self.telegram .. buf
-                var eotpos = bufFind(self.telegram, 0x21)
-                if eotpos > -1
-                    self.eotpos = eotpos
-                    self.payloadAvailable = true
-                    self.ser.flush()
-                    return
-                end
             end
         end
+        self.ser.flush()
+        self.payloadAvailable = true
     end
 
     def every_250ms()
         if !self.payloadAvailable return end
-        self.wireCrc = string.toupper(self.telegram[self.eotpos + 1 .. self.eotpos + 4].asstring())
-        self.crc = crc16(self.telegram, 0, self.eotpos + 1)
+
+        var eotpos = bufFindRev(self.telegram, 0x21)  # '!'
+        if eotpos == -1 return end
+
+        self.wireCrc = string.toupper(self.telegram[eotpos + 1 .. eotpos + 4].asstring())
+        self.crc = crc16(self.telegram, 0, eotpos + 1)
         self.crc = format('%04X', self.crc)
         if self.crc == self.wireCrc
             self.wireStats.push(true)
@@ -202,7 +209,7 @@ class smr
         self.payloadAvailable = false
 
         if self.config['debugTelegram']
-            var dtopic = self.config['baseTopic'] + self.config['simpleTopic'] + '/telegram'
+            var dtopic = self.config['topic'] + 'telegram'
             var half = self.telegram.size() / 2
             mqtt.publish(dtopic + '1', self.telegram[0 .. half - 1].tohex())
             mqtt.publish(dtopic + '2', self.telegram[half ..].tohex())
@@ -210,26 +217,24 @@ class smr
         end
 
         self.crc = nil
-        self.eotpos = -1
         self.telegram = bytes()
 
         var wq = self.wireStats.getQuality()
         if wq == -1 return end
-        if self.config['useJson']
-            var topic = self.config['baseTopic'] + 'SENSOR'
+        if self.config['tasmotaTele']
+            var topic = self.config['tasmotaTopic']
             var payload = format(
                 '{"Time":"%s","%s":{"%s":%d}}', tasmota.time_str(tasmota.rtc()['local']),
                 self.config['meterName'], 'wire_quality', wq)
             mqtt.publish(topic, payload)
         else
-            var topic = self.config['baseTopic'] + self.config['simpleTopic'] + '/wire_quality'
+            var topic = self.config['topic'] + 'wire_quality'
             mqtt.publish(topic, format('%d', wq))
         end
     end
 
     def web_sensor()
         if self.config.find('webSensors') == nil || !self.dataAvailable return end
-        # "{s}MPU6886 acc_x{m}%.3f G{e}"..
         var tmp = ''
         for name: self.config['webSensors']
             var value = self.sensors[name][1]
