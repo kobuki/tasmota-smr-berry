@@ -4,7 +4,7 @@ import mqtt
 import json
 
 def log(msg)
-    tasmota.log('SMR: ' + msg)
+    tasmota.log('SMR: ' + str(msg))
 end
 
 def bufFind(buf, needle)
@@ -76,6 +76,7 @@ end
 
 class smr
     var config, telegram, rules, ser, crc, wireCrc, eotpos, payloadAvailable, wireStats
+    var sensors, dataAvailable
 
     # 1,1-0:32.7.0(@1,Voltage,V,voltage_l1,17
     # 1,0-0:1.0.0(@#),Time,time,time,0
@@ -87,6 +88,8 @@ class smr
         self.crc = nil
         self.eotpos = -1
         self.payloadAvailable = false
+        self.sensors = {}
+        self.dataAvailable = false
 
         self.config = json.load(readTextFile('smr-config.json'))
         self.config['baseTopic'] = string.replace(string.replace(
@@ -108,8 +111,9 @@ class smr
             if size(codeDesc[1]) > 1 && codeDesc[1][1] == '#'
                 vType = 1  # string
             end
-            # obis_code, metric_description, unit, metric_name, vType
+            # obis_code = metric_description, unit, metric_name, vType
             self.rules[code] = [parts[2], parts[3], parts[4], vType]
+            self.sensors[parts[4]] = [code, nil]
             happyTasmota()
         end
 
@@ -153,8 +157,10 @@ class smr
                 var topic = self.config['baseTopic'] + self.config['simpleTopic'] + '/' + name
                 mqtt.publish(topic, format('%s', value))
             end
+            self.sensors[name][1] = value
             happyTasmota()
         end
+        self.dataAvailable = true
     end
     
     def readTelegram()
@@ -219,6 +225,20 @@ class smr
             var topic = self.config['baseTopic'] + self.config['simpleTopic'] + '/wire_quality'
             mqtt.publish(topic, format('%d', wq))
         end
+    end
+
+    def web_sensor()
+        if self.config.find('webSensors') == nil || !self.dataAvailable return end
+        # "{s}MPU6886 acc_x{m}%.3f G{e}"..
+        var tmp = ''
+        for name: self.config['webSensors']
+            var value = self.sensors[name][1]
+            var rule = self.rules[self.sensors[name][0]]
+            var desc = rule[0]
+            var unit = rule[1]
+            tmp += format('{s}%s{m}%s %s{e}', desc, value, unit)
+        end
+        tasmota.web_send_decimal(tmp)
     end
 
 end
