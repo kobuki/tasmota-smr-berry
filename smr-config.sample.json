@@ -8,6 +8,7 @@
     "meterName": "ma105",
     "statDepth": 90,
     "debugTelegram": true,
+    "ignoreCrc": false,
     "webSensors": [
         "voltage_l1",
         "power_import",

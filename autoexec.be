@@ -88,7 +88,9 @@ end
 class smr
     var config, telegram, rules, ser, crc, wireCrc, payloadAvailable, wireStats
     var sensors, dataAvailable
+    var reCode, reNum, reStr
 
+    # Sample rule fragment:
     # 1,1-0:32.7.0(@1,Voltage,V,voltage_l1,17
     # 1,0-0:1.0.0(@#),Time,time,time,0
 
@@ -97,9 +99,14 @@ class smr
         self.telegram = nil
         self.rules = {}
         self.crc = nil
+        self.wireCrc = nil
         self.payloadAvailable = false
         self.sensors = {}
         self.dataAvailable = false
+
+        self.reCode = re.compile('^([0-9]-[0-9]:[0-9]+\\.[0-9]+\\.[0-9]+)(\\([^)]+\\))')
+        self.reNum = re.compile('^\\((-?[0-9.]+)[*)]')
+        self.reStr = re.compile('^\\(([^)]*)\\)')
 
         self.config = json.load(readTextFile('smr-config.json'))
         self.config['tasmotaTopic'] = string.replace(string.replace(
@@ -128,6 +135,7 @@ class smr
         end
 
         self.ser = serial(self.config['serialRx'], self.config['serialTx'], self.config['serialBaud'], serial.SERIAL_8N1, true)
+        self.ser.flush()
         tasmota.add_fast_loop(/-> self.readTelegram())
     end
 
@@ -135,6 +143,7 @@ class smr
         self.ser.close()
     end
 
+    # Sample telegram fragment:
     # 1-0:8.8.0(000023.622*kvarh)
     # 1-0:15.8.0(000223.000*kWh)
     # 1-0:32.7.0(237.2*V)
@@ -143,18 +152,29 @@ class smr
     # !AB12
 
     def processPayload()
+        if self.config['ignoreCrc']
+            # do some cleanup only when CRC is ignored (otherwise CRC might fail)
+            for i: 0 .. self.telegram.size() - 1
+                var bb = self.telegram[i]
+                if bb != 0x0d && bb != 0x0a && (bb < 0x20 || bb > 0x7f)
+                    self.telegram[i] = 0x20
+                end
+            end
+        end
+
         var obis = string.split(self.telegram.asstring(), '\r\n')
-        var rr = re.compile('^([0-9]-[0-9]:[0-9]+\\.[0-9]+\\.[0-9]+)\\(([^*)]*)?[*)]([^()]+)?\\)?')
         var timeStr = tasmota.time_str(tasmota.rtc()['local'])
 
         for line: obis
-            var m = rr.match(line)
-            if m == nil || m.size() < 4 continue end
+            var m = self.reCode.match(line)
+            if m == nil || m.size() < 3 continue end
             var code = m[1]
             var rule = self.rules.find(code)
             if rule == nil continue end
+            m = rule[3] == 0 ? self.reNum.match(m[2]) : self.reStr.match(m[2])
+            if m == nil || m.size() < 2 continue end
             var name = rule[2]
-            var value = rule[3] == 1 ? m[2] : real(m[2])
+            var value = rule[3] == 1 ? m[1] : real(m[1])
             # log(format('code: %s, desc: %s, unit: %s, name: %s, value: %s', code, rule[0], rule[1], name, value))
             if self.config['tasmotaTele']
                 # tele/ma105-meter/SENSOR = {"Time":"2024-10-25T19:06:56","ma105":{"energy_export":102.791}}
@@ -190,43 +210,53 @@ class smr
     end
 
     def every_250ms()
-        if !self.payloadAvailable return end
+        if !self.payloadAvailable || self.telegram == nil || self.telegram.size() == 0 return end
 
-        var eotpos = bufFindRev(self.telegram, 0x21)  # '!'
-        if eotpos == -1 return end
-
-        self.wireCrc = string.toupper(self.telegram[eotpos + 1 .. eotpos + 4].asstring())
-        self.crc = crc16(self.telegram, 0, eotpos + 1)
-        self.crc = format('%04X', self.crc)
-        if self.crc == self.wireCrc
-            self.wireStats.push(true)
-            self.processPayload()
-            log('processed payload, CRC OK')
-        else
-            self.wireStats.push(false)
-            log(format('payload CRC error, calculated CRC: %s, CRC on wire: %s', self.crc, self.wireCrc))
-        end
-        self.payloadAvailable = false
-
-        var wq = self.wireStats.getQuality()
-        if wq == -1 return end
-        if self.config['tasmotaTele']
-            var topic = self.config['tasmotaTopic']
-            var payload = format(
-                '{"Time":"%s","%s":{"%s":%d}}', tasmota.time_str(tasmota.rtc()['local']),
-                self.config['meterName'], 'wire_quality', wq)
-            mqtt.publish(topic, payload)
-        else
-            var topic = self.config['topic'] + 'wire_quality'
-            mqtt.publish(topic, format('%d', wq))
-        end
-
+        var dtopic = self.config['topic'] + 'telegram'
         if self.config['debugTelegram']
-            var dtopic = self.config['topic'] + 'telegram'
+            # do this before any processing
             var half = self.telegram.size() / 2
             mqtt.publish(dtopic + '1', self.telegram[0 .. half - 1].tohex())
             mqtt.publish(dtopic + '2', self.telegram[half ..].tohex())
-            mqtt.publish(dtopic + '_meta', format('%d,%s', self.telegram.size(), self.crc))
+        end
+
+        var eotpos = bufFindRev(self.telegram, 0x21)  # '!'
+        if self.telegram[0] != 0x2f || eotpos == -1 return end
+
+        if self.config['ignoreCrc']
+            self.processPayload()
+            log('processed payload, CRC ignored')
+        else
+            self.wireCrc = string.toupper(self.telegram[eotpos + 1 .. eotpos + 4].asstring())
+            self.crc = crc16(self.telegram, 0, eotpos + 1)
+            self.crc = format('%04X', self.crc)
+            if self.crc == self.wireCrc
+                self.wireStats.push(true)
+                self.processPayload()
+                log('processed payload, CRC OK')
+            else
+                self.wireStats.push(false)
+                log(format('payload CRC error, calculated CRC: %s, CRC on wire: %s', self.crc, self.wireCrc))
+            end
+        end
+        self.payloadAvailable = false
+
+        if self.config['debugTelegram']
+            mqtt.publish(dtopic + '_meta', format('%d,%s,%s', self.telegram.size(), self.wireCrc, self.crc))
+        end
+
+        var wq = self.wireStats.getQuality()
+        if self.config['ignoreCrc'] && wq != -1
+            if self.config['tasmotaTele']
+                var topic = self.config['tasmotaTopic']
+                var payload = format(
+                    '{"Time":"%s","%s":{"%s":%d}}', tasmota.time_str(tasmota.rtc()['local']),
+                    self.config['meterName'], 'wire_quality', wq)
+                mqtt.publish(topic, payload)
+            else
+                var topic = self.config['topic'] + 'wire_quality'
+                mqtt.publish(topic, format('%d', wq))
+            end
         end
 
         self.crc = nil
