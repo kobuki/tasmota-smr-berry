@@ -94,7 +94,7 @@ class smr
 
     def init()
         self.config = nil
-        self.telegram = bytes()
+        self.telegram = nil
         self.rules = {}
         self.crc = nil
         self.payloadAvailable = false
@@ -208,17 +208,6 @@ class smr
         end
         self.payloadAvailable = false
 
-        if self.config['debugTelegram']
-            var dtopic = self.config['topic'] + 'telegram'
-            var half = self.telegram.size() / 2
-            mqtt.publish(dtopic + '1', self.telegram[0 .. half - 1].tohex())
-            mqtt.publish(dtopic + '2', self.telegram[half ..].tohex())
-            mqtt.publish(dtopic + '_crc', self.crc)
-        end
-
-        self.crc = nil
-        self.telegram = bytes()
-
         var wq = self.wireStats.getQuality()
         if wq == -1 return end
         if self.config['tasmotaTele']
@@ -231,6 +220,18 @@ class smr
             var topic = self.config['topic'] + 'wire_quality'
             mqtt.publish(topic, format('%d', wq))
         end
+
+        if self.config['debugTelegram']
+            var dtopic = self.config['topic'] + 'telegram'
+            var half = self.telegram.size() / 2
+            mqtt.publish(dtopic + '1', self.telegram[0 .. half - 1].tohex())
+            mqtt.publish(dtopic + '2', self.telegram[half ..].tohex())
+            mqtt.publish(dtopic + '_meta', format('%d,%s', self.telegram.size(), self.crc))
+        end
+
+        self.crc = nil
+        self.wireCrc = nil
+        self.telegram = nil
     end
 
     def web_sensor()
