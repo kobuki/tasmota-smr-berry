@@ -14,11 +14,11 @@ This project is an attempt to create a Tasmota Berry driver for OBIS ASCII forma
 
 #### Hardware
 
- * any ESP32 device supported by Tasmota with available pins for serial RX/TX pins (configurable) available
+ * any ESP32 device supported by Tasmota with available pins for serial RX/TX pins (configurable)
  * some wiring
    * for basic connection setup, please refer to [this page](https://github.com/bobsiboo/esp8266_p1meter-Belgium?tab=readme-ov-file#connecting-to-the-p1-meter), for example
    * note that it's not necessary to use the inverter circuit per [Tasmota instructions](https://tasmota.github.io/docs/P1-Smart-Meter/)
-   * an option to use with the inverter circuit might be added later
+   * an option to use with an inverter circuit might be added later
 
 #### Software
  * Tasmota 14+ ESP32 (should run on older versions - untested)
@@ -49,8 +49,8 @@ meterName          | Yes      | Name of the meter, used in various places for me
 tasmotaTele        | Yes      | Use JSON-formatted Tasmota teleperiod sensor messages under `tele/<tasmota name>/SENSOR`.
 statDepth          | Yes      | Number of latest telegrams to keep validity stats for, requires `"ignoreCrc": false`. The `wire_quality` topic shows the percentage of the telegrams validated by CRC.
 debugTelegram      | Yes      | Enable raw (hex encoded) telegram MQTT messages and some metadata to aid in debugging telegrams.
-ignoreCrc          | Yes      | Ignore CRC checks (true/false). `false` also disables stats.
-webSensors         | No       | JSON array with names for sensors to display on Tasmota web UI main page.
+ignoreCrc          | Yes      | Disable CRC checks. Disabling also disables stats.
+webSensors         | No       | JSON array with names for sensors to display on the Tasmota web UI main page.
 teleperiodSensors  | No       | JSON array with names for sensors to add to standard Tasmota teleperiod messages. Requires `"tasmotaTele": true`.
 
 #### Final steps
