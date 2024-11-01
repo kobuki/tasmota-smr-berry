@@ -30,13 +30,13 @@ This project is an attempt to create a Tasmota Berry driver for OBIS ASCII forma
 
 Clone/download this repository locally. Make a copy of `smr-config.sample.json` as `smr-config.json`, `smr-rules.sample.conf` as `smr-rules.conf`. A few settings and probably the whole rules file will need to be updated.
 
-#### The rules configuration file
+#### The rules configuration file (`smr-rules.conf`)
 
 The sample rules file contains a definition for the author's meter, but any OBIS ASCII meter definition from [the available ones](https://tasmota.github.io/docs/Smart-Meter-Interface/#smart-meter-descriptors) can be used. Just copy the part after `>M 1`, up to the `#`. Only the lines for the individual metrics are interpreted. They can be customized per the description on the same page. Note that the author, so far, was only able to test with their own device.
 
 From the descriptor lines, only the following fields are used: OBIS code, description, unit, name. In the decoder part of the 2nd field, only the `(@` and `(#` semantics are interpreted (numeric vs. string).
 
-#### The driver configuration file
+#### The driver configuration file (`smr-config.conf`)
 
 Setting name       | Required | Description
 ------------------ | -------- | -----------
