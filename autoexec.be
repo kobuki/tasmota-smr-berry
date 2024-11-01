@@ -246,7 +246,7 @@ class smr
         end
 
         var wq = self.wireStats.getQuality()
-        if self.config['ignoreCrc'] && wq != -1
+        if !self.config['ignoreCrc'] && wq != -1
             if self.config['tasmotaTele']
                 var topic = self.config['tasmotaTopic']
                 var payload = format(
