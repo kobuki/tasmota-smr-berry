@@ -7,15 +7,6 @@ def log(msg)
     tasmota.log('SMR: ' + str(msg))
 end
 
-def bufFind(buf, needle)
-    for i: 0 .. buf.size() - 1
-        if buf[i] == needle
-            return i
-        end
-    end
-    return -1
-end
-
 def bufFindRev(buf, needle)
     var i = buf.size() - 1
     while i >= 0
@@ -43,16 +34,19 @@ def happyTasmota()
 end
 
 def crc16(data, crc, len)
-    for di: 0 .. len - 1
+    var di = 0
+    while di < len
         crc ^= data[di]
-        for i: 0 .. 7
+        var i = 0
+        while i < 8
             if crc & 0x0001
                 crc = (crc >> 1) ^ 0xa001
             else
                 crc >>= 1
             end
+            i += 1
         end
-        happyTasmota()
+        di += 1
     end
     return crc
 end
