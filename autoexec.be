@@ -192,11 +192,12 @@ class smr
         self.payloadAvailable = false
         var buf = self.ser.read()
         self.telegram = buf
-        var t1 = tasmota.millis() + 150
+        var t1 = tasmota.millis() + 25
         while !tasmota.time_reached(t1)
             while self.ser.available()
                 buf = self.ser.read()
                 self.telegram .. buf
+                t1 = tasmota.millis() + 25
             end
         end
         self.ser.flush()
@@ -284,7 +285,8 @@ class smr
             fragMap[name] = value
         end
         if !self.config['ignoreCrc']
-            var wq = self.dataAvailable ? self.wireStats.getQuality() : nil
+            var wq = self.wireStats.getQuality()
+            wq = wq == -1 ? nil : wq
             if wq != -1
                 fragMap['wire_quality'] = wq
             end
