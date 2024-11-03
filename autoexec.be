@@ -276,16 +276,18 @@ class smr
     end
 
     def json_append()
-        if self.config.find('teleperiodSensors') == nil || !self.dataAvailable return end
+        if self.config.find('teleperiodSensors') == nil return end
         var meterName = self.config['meterName']
         var fragMap = {}
         for name: self.config['teleperiodSensors']
-            var value = self.sensors[name][1]
+            var value = self.dataAvailable ? self.sensors[name][1] : nil
             fragMap[name] = value
         end
-        var wq = self.wireStats.getQuality()
-        if wq != -1
-            fragMap['wire_quality'] = wq
+        if !self.config['ignoreCrc']
+            var wq = self.dataAvailable ? self.wireStats.getQuality() : nil
+            if wq != -1
+                fragMap['wire_quality'] = wq
+            end
         end
         var frag = ',' + json.dump({meterName: fragMap})[1 .. -2]
         tasmota.response_append(frag)
