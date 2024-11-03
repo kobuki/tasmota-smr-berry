@@ -279,7 +279,7 @@ class smr
         if self.config.find('teleperiodSensors') == nil || !self.dataAvailable return end
         var meterName = self.config['meterName']
         var fragMap = {}
-        for name: self.config['webSensors']
+        for name: self.config['teleperiodSensors']
             var value = self.sensors[name][1]
             fragMap[name] = value
         end
