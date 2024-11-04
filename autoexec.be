@@ -147,7 +147,7 @@ class smr
 
     def processPayload()
         if self.config['ignoreCrc']
-            # do some cleanup only when CRC is ignored (otherwise CRC might fail)
+            # do some cleanup only when CRC is ignored
             for i: 0 .. self.telegram.size() - 1
                 var bb = self.telegram[i]
                 if bb != 0x0d && bb != 0x0a && (bb < 0x20 || bb > 0x7f)
@@ -207,9 +207,10 @@ class smr
     def every_250ms()
         if !self.payloadAvailable || self.telegram == nil || self.telegram.size() == 0 return end
 
-        var dtopic = self.config['topic'] + 'telegram'
+        var dtopic
         if self.config['debugTelegram']
             # do this before any processing
+            dtopic = self.config['topic'] + 'telegram'
             var half = self.telegram.size() / 2
             mqtt.publish(dtopic + '1', self.telegram[0 .. half - 1].tohex())
             mqtt.publish(dtopic + '2', self.telegram[half ..].tohex())
